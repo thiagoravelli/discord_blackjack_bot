@@ -239,7 +239,12 @@ async def start_game(table):
     await end_game(table)
 
 async def player_turn(table, player):
+    user_data = get_user(player.user.id)
+    balance = user_data[1]
+    amount = player.bet
     value, _ = calculate_hand(player.hand)
+    if value == 21:
+        return
     await table.channel.send(f"{player.user.mention}'s turn. Hand: {' '.join(player.hand)} | Total: {value}")
     
     while True:
@@ -261,6 +266,24 @@ async def player_turn(table, player):
                     break
                 if value == 21:
                     break
+
+            if msg.content.lower() == '!double':
+                if balance >= amount:
+                    player.hand.append(table.shoe.pop())
+                    player.bet += amount
+                    balance -= amount
+                    update_user(player.user.id, balance=balance)
+                    await table.channel.send(f"{player.user.mention} doubled! | New balance: {balance}")
+                    value, _ = calculate_hand(player.hand)
+                    await table.channel.send(f"New card: {player.hand[-1]} | Total: {value}")
+
+                    if value > 21:
+                        player.busted = True
+                        await table.channel.send("Bust!")
+
+                    break
+                else:
+                    await table.channel.send("Insufficient funds!")
             
             elif msg.content.lower() == '!stand':
                 break
@@ -298,7 +321,7 @@ async def end_game(table):
             result = "lost (bust)"
         elif value == 21 and len(player.hand) == 2 and not dealer_blackjack:
             winnings = int(player.bet * 2.5)
-            balance += winnings + player.bet
+            balance += winnings
             result = f"won {winnings} (Blackjack!)"
         elif dealer_bust or value > dealer_value:
             winnings = player.bet * 2
